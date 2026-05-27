@@ -8,7 +8,7 @@ export default class RequestOptions {
     this.headers = [];
   }
 
-  setMethod(method: 'GET' | 'POST' | 'DELETE' | 'PUT'): RequestOptions {
+  setMethod(method: 'GET' | 'POST' | 'DELETE' | 'PUT' | 'PATCH'): RequestOptions {
     this.method = method;
     return this;
   }

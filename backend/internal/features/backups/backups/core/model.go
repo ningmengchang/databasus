@@ -30,6 +30,8 @@ type Backup struct {
 
 	RestoreVerificationStatus RestoreVerificationStatus `json:"restoreVerificationStatus" gorm:"column:restore_verification_status;type:text;not null;default:'NOT_VERIFIED'"`
 
+	Description *string `json:"description" gorm:"column:description;type:text"`
+
 	BackupSizeMb      float64 `json:"backupSizeMb"      gorm:"column:backup_size_mb;default:0"`
 	BackupRawDbSizeMb float64 `json:"backupRawDbSizeMb" gorm:"column:backup_raw_db_size_mb;default:0"`
 

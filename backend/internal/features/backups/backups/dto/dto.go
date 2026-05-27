@@ -85,6 +85,10 @@ type UploadBasebackupResponse struct {
 	BackupID uuid.UUID `json:"backupId"`
 }
 
+type UpdateBackupDescriptionRequest struct {
+	Description *string `json:"description"`
+}
+
 type FinalizeBasebackupRequest struct {
 	BackupID     uuid.UUID `json:"backupId"     binding:"required"`
 	StartSegment string    `json:"startSegment"`

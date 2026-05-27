@@ -12,7 +12,7 @@ import {
   SafetyOutlined,
   SyncOutlined,
 } from '@ant-design/icons';
-import { App, Button, Modal, Spin, Table, Tooltip } from 'antd';
+import { App, Button, Input, Modal, Spin, Table, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { type JSX, useEffect, useRef, useState } from 'react';
@@ -115,6 +115,9 @@ export const BackupsComponent = ({
   const [isFilterPanelVisible, setIsFilterPanelVisible] = useState(false);
   const [filters, setFilters] = useState<BackupsFilters>({});
 
+  const [editingDescriptionBackupId, setEditingDescriptionBackupId] = useState<string | undefined>();
+  const [editingDescriptionValue, setEditingDescriptionValue] = useState('');
+
   const downloadBackup = async (backupId: string) => {
     try {
       await backupsApi.downloadBackup(backupId);
@@ -122,6 +125,22 @@ export const BackupsComponent = ({
       alert((e as Error).message);
     } finally {
       setDownloadingBackupId(undefined);
+    }
+  };
+
+  const saveDescription = async (backupId: string, description: string) => {
+    setEditingDescriptionBackupId(undefined);
+
+    const trimmed = description.trim();
+    const valueToSave = trimmed === '' ? null : trimmed;
+
+    try {
+      await backupsApi.updateDescription(backupId, valueToSave);
+      setBackups((prev) =>
+        prev.map((b) => (b.id === backupId ? { ...b, description: valueToSave ?? undefined } : b)),
+      );
+    } catch (e) {
+      alert((e as Error).message);
     }
   };
 
@@ -557,6 +576,46 @@ export const BackupsComponent = ({
       render: (status: BackupStatus, record: Backup) => renderStatus(status, record),
     },
     {
+      title: 'Description',
+      dataIndex: 'description',
+      key: 'description',
+      width: 200,
+      render: (description: string | undefined, record: Backup) => {
+        if (editingDescriptionBackupId === record.id) {
+          return (
+            <Input
+              autoFocus
+              size="small"
+              value={editingDescriptionValue}
+              placeholder="Add description..."
+              onChange={(e) => setEditingDescriptionValue(e.target.value)}
+              onPressEnter={() => saveDescription(record.id, editingDescriptionValue)}
+              onBlur={() => saveDescription(record.id, editingDescriptionValue)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setEditingDescriptionBackupId(undefined);
+                }
+              }}
+            />
+          );
+        }
+
+        return (
+          <div
+            className="min-h-[22px] cursor-pointer rounded px-1 py-0.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+            onClick={() => {
+              setEditingDescriptionBackupId(record.id);
+              setEditingDescriptionValue(description ?? '');
+            }}
+          >
+            {description || (
+              <span className="text-gray-400 dark:text-gray-500">Add description...</span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       title: (
         <div className="flex items-center">
           Size
@@ -687,7 +746,7 @@ export const BackupsComponent = ({
         </div>
       )}
 
-      <div className="mt-5 w-full md:max-w-[850px]">
+      <div className="mt-5 w-full md:max-w-[1050px]">
         {/* Mobile card view */}
         <div className="md:hidden">
           {isBackupsLoading ? (
@@ -743,6 +802,40 @@ export const BackupsComponent = ({
                           {formatDuration(backup.backupDurationMs)}
                         </div>
                       </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Description</div>
+                      {editingDescriptionBackupId === backup.id ? (
+                        <Input
+                          autoFocus
+                          size="small"
+                          value={editingDescriptionValue}
+                          placeholder="Add description..."
+                          onChange={(e) => setEditingDescriptionValue(e.target.value)}
+                          onPressEnter={() => saveDescription(backup.id, editingDescriptionValue)}
+                          onBlur={() => saveDescription(backup.id, editingDescriptionValue)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              setEditingDescriptionBackupId(undefined);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className="min-h-[22px] cursor-pointer rounded px-1 py-0.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                          onClick={() => {
+                            setEditingDescriptionBackupId(backup.id);
+                            setEditingDescriptionValue(backup.description ?? '');
+                          }}
+                        >
+                          {backup.description || (
+                            <span className="text-gray-400 dark:text-gray-500">
+                              Add description...
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-end border-t border-gray-200 pt-3">

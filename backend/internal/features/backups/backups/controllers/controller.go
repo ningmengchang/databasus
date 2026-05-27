@@ -30,6 +30,7 @@ func (c *BackupController) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/backups/:id/download-token", c.GenerateDownloadToken)
 	router.DELETE("/backups/:id", c.DeleteBackup)
 	router.POST("/backups/:id/cancel", c.CancelBackup)
+	router.PATCH("/backups/:id/description", c.UpdateDescription)
 }
 
 // RegisterPublicRoutes registers routes that don't require Bearer authentication
@@ -172,6 +173,45 @@ func (c *BackupController) CancelBackup(ctx *gin.Context) {
 	}
 
 	if err := c.backupService.CancelBackup(user, id); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
+}
+
+// UpdateDescription
+// @Summary Update backup description
+// @Description Update the description field of a backup
+// @Tags backups
+// @Accept json
+// @Produce json
+// @Param id path string true "Backup ID"
+// @Param request body backups_dto.UpdateBackupDescriptionRequest true "Description data"
+// @Success 204
+// @Failure 400
+// @Failure 401
+// @Router /backups/{id}/description [patch]
+func (c *BackupController) UpdateDescription(ctx *gin.Context) {
+	user, ok := users_middleware.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	id, err := uuid.Parse(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid backup ID"})
+		return
+	}
+
+	var request backups_dto.UpdateBackupDescriptionRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := c.backupService.UpdateBackupDescription(user, id, request.Description); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

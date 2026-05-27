@@ -551,6 +551,15 @@ func (r *BackupRepository) CountByDatabaseIDWithFilters(
 	return count, nil
 }
 
+func (r *BackupRepository) UpdateDescription(backupID uuid.UUID, description *string) error {
+	return storage.
+		GetDb().
+		Model(&Backup{}).
+		Where("id = ?", backupID).
+		Update("description", description).
+		Error
+}
+
 func (f *BackupFilters) applyToQuery(query *gorm.DB) *gorm.DB {
 	if len(f.Statuses) > 0 {
 		query = query.Where("status IN ?", f.Statuses)

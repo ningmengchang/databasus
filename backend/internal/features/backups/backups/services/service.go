@@ -219,6 +219,36 @@ func (s *BackupService) SetRestoreVerificationStatus(
 	return s.backupRepository.UpdateRestoreVerificationStatus(backupID, status)
 }
 
+func (s *BackupService) UpdateBackupDescription(
+	user *users_models.User,
+	backupID uuid.UUID,
+	description *string,
+) error {
+	backup, err := s.backupRepository.FindByID(backupID)
+	if err != nil {
+		return err
+	}
+
+	database, err := s.databaseService.GetDatabaseByID(backup.DatabaseID)
+	if err != nil {
+		return err
+	}
+
+	if database.WorkspaceID == nil {
+		return errors.New("cannot update backup description for database without workspace")
+	}
+
+	canManage, err := s.workspaceService.CanUserManageDBs(*database.WorkspaceID, user)
+	if err != nil {
+		return err
+	}
+	if !canManage {
+		return errors.New("insufficient permissions to update backup description")
+	}
+
+	return s.backupRepository.UpdateDescription(backupID, description)
+}
+
 func (s *BackupService) CancelBackup(
 	user *users_models.User,
 	backupID uuid.UUID,

@@ -265,4 +265,25 @@ export const apiHelper = {
 
     return response.text();
   },
+
+  fetchPatchRaw: async (
+    url: string,
+    requestOptions?: RequestOptions,
+    isRetryOnError = false,
+  ): Promise<string> => {
+    const optionsWrapper = (requestOptions ?? new RequestOptions())
+      .setMethod('PATCH')
+      .addHeader('Content-Type', 'application/json')
+      .addHeader('Access-Control-Allow-Methods', 'PATCH')
+      .addHeader('Accept', 'application/json')
+      .addHeader('Authorization', accessTokenHelper.getAccessToken());
+
+    const response = await makeRequest(
+      url,
+      optionsWrapper,
+      isRetryOnError ? 0 : REPEAT_TRIES_COUNT,
+    );
+
+    return response.text();
+  },
 };

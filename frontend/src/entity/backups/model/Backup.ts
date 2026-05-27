@@ -17,5 +17,6 @@ export interface Backup {
   encryption: BackupEncryption;
   pgWalBackupType?: PgWalBackupType;
   restoreVerificationStatus?: RestoreVerificationStatus;
+  description?: string;
   createdAt: Date;
 }

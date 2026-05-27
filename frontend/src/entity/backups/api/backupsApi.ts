@@ -71,4 +71,13 @@ export const backupsApi = {
   async cancelBackup(id: string) {
     return apiHelper.fetchPostRaw(`${getApplicationServer()}/api/v1/backups/${id}/cancel`);
   },
+
+  async updateDescription(id: string, description: string | null) {
+    const requestOptions: RequestOptions = new RequestOptions();
+    requestOptions.setBody(JSON.stringify({ description }));
+    return apiHelper.fetchPatchRaw(
+      `${getApplicationServer()}/api/v1/backups/${id}/description`,
+      requestOptions,
+    );
+  },
 };
