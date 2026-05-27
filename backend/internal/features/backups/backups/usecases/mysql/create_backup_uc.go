@@ -110,9 +110,8 @@ func (uc *CreateMysqlBackupUsecase) buildMysqldumpArgs(my *mysqltypes.MysqlDatab
 		"--single-transaction",
 		"--routines",
 		"--set-gtid-purged=OFF",
-		"--quick",
-		"--skip-extended-insert",
-		"--skip-add-locks",
+"--quick",
+            "--skip-add-locks",
 		"--verbose",
 	}
 

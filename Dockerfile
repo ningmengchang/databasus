@@ -137,6 +137,11 @@ ENV CONTAINER_ARCH=$TARGETARCH
 # Set production mode for Docker containers
 ENV ENV_MODE=production
 
+# Replace default Debian mirror (deb.debian.org might be unreachable behind some
+# firewalls or DNS-based redirects) with a working mirror.
+ARG APT_MIRROR=http://mirrors.tuna.tsinghua.edu.cn
+RUN sed -i "s|http://deb.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources
+
 # ========= Install all apt packages in a single layer =========
 # Combines base packages + PostgreSQL 17 (pgdg repo) + Valkey (greensec repo) + rclone
 # into one RUN to minimise layer count and cache-export overhead.
