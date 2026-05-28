@@ -81,6 +81,9 @@ export const RestoresComponent = ({ database, backup }: Props) => {
   const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
   const [restoreToCancelId, setRestoreToCancelId] = useState<string | undefined>();
 
+  const [versionMismatchMessage, setVersionMismatchMessage] = useState<string | undefined>();
+  const [pendingRestoreDb, setPendingRestoreDb] = useState<Database | undefined>();
+
   const isReloadInProgress = useRef(false);
 
   const loadRestores = async () => {
@@ -100,18 +103,34 @@ export const RestoresComponent = ({ database, backup }: Props) => {
     isReloadInProgress.current = false;
   };
 
-  const restore = async (editingDatabase: Database) => {
+  const doRestore = async (editingDatabase: Database, isSkipVersionCheck: boolean) => {
     try {
       await restoreApi.restoreBackup({
         backupId: backup.id,
         ...getRestorePayload(database, editingDatabase),
+        isSkipVersionCheck,
       });
       await loadRestores();
 
       setIsShowRestore(false);
     } catch (e) {
-      alert((e as Error).message);
+      const errorMessage = (e as Error).message;
+
+      if (!isSkipVersionCheck && errorMessage.includes('is higher than restore database version')) {
+        setVersionMismatchMessage(errorMessage);
+        setPendingRestoreDb(editingDatabase);
+
+        return;
+      }
+
+      alert(errorMessage);
     }
+  };
+
+  const restore = async (editingDatabase: Database) => {
+    setVersionMismatchMessage(undefined);
+    setPendingRestoreDb(undefined);
+    await doRestore(editingDatabase, false);
   };
 
   const cancelRestore = async (restoreId: string) => {
@@ -141,182 +160,34 @@ export const RestoresComponent = ({ database, backup }: Props) => {
     (restore) => restore.status === RestoreStatus.IN_PROGRESS,
   );
 
-  if (isShowRestore) {
-    return (
-      <>
-        <div className="my-5 text-sm">
-          Enter info of the database we will restore backup to.{' '}
-          <u>The empty database for restore should be created before the restore</u>. During the
-          restore, all the current data will be cleared
-          <br />
-          <br />
-          Make sure the database is not used right now (most likely you do not want to restore the
-          data to the same DB where the backup was made)
-        </div>
-
-        <EditDatabaseSpecificDataComponent
-          database={editingDatabase}
-          onCancel={() => setIsShowRestore(false)}
-          isShowBackButton={false}
-          onBack={() => setIsShowRestore(false)}
-          saveButtonText="Restore to this DB"
-          isSaveToApi={false}
-          onSaved={(database) => {
-            setEditingDatabase({ ...database });
-            restore(database);
-          }}
-          isRestoreMode={true}
-        />
-      </>
-    );
-  }
-
   return (
-    <div className="mt-5">
-      {isLoading ? (
-        <div className="flex w-full justify-center">
-          <Spin />
-        </div>
-      ) : (
-        <>
-          <Button
-            className="w-full"
-            type="primary"
-            disabled={isRestoreInProgress}
-            loading={isRestoreInProgress}
-            onClick={() => setIsShowRestore(true)}
-          >
-            Select database to restore to
-          </Button>
-
-          {restores.length === 0 && (
-            <div className="my-5 text-center text-gray-400">No restores yet</div>
-          )}
-
-          <div className="mt-5">
-            {restores.map((restore) => {
-              let restoreDurationMs = 0;
-              if (restore.status === RestoreStatus.IN_PROGRESS) {
-                restoreDurationMs = Date.now() - new Date(restore.createdAt).getTime();
-              } else {
-                restoreDurationMs = restore.restoreDurationMs;
-              }
-
-              const minutes = Math.floor(restoreDurationMs / 60000);
-              const seconds = Math.floor((restoreDurationMs % 60000) / 1000);
-              const milliseconds = restoreDurationMs % 1000;
-              const duration = `${minutes}m ${seconds}s ${milliseconds}ms`;
-
-              const backupDurationMs = backup.backupDurationMs;
-              const expectedRestoreDurationMs = backupDurationMs * 5;
-              const expectedRestoreDuration = `${Math.floor(expectedRestoreDurationMs / 60000)}m ${Math.floor((expectedRestoreDurationMs % 60000) / 1000)}s`;
-
-              return (
-                <div key={restore.id} className="mb-1 rounded border border-gray-200 p-3 text-sm">
-                  <div className="mb-1 flex items-center justify-between">
-                    <div className="flex flex-1">
-                      <div className="w-[75px] min-w-[75px]">Status</div>
-
-                      {restore.status === RestoreStatus.FAILED && (
-                        <Tooltip title="Click to see error details">
-                          <div
-                            className="flex cursor-pointer items-center text-red-600 underline"
-                            onClick={() => setShowingRestoreError(restore)}
-                          >
-                            <ExclamationCircleOutlined
-                              className="mr-2"
-                              style={{ fontSize: 16, color: '#ff0000' }}
-                            />
-
-                            <div>Failed</div>
-                          </div>
-                        </Tooltip>
-                      )}
-
-                      {restore.status === RestoreStatus.COMPLETED && (
-                        <div className="flex items-center">
-                          <CheckCircleOutlined
-                            className="mr-2"
-                            style={{ fontSize: 16, color: '#008000' }}
-                          />
-
-                          <div>Successful</div>
-                        </div>
-                      )}
-
-                      {restore.status === RestoreStatus.CANCELED && (
-                        <div className="flex items-center text-gray-500">
-                          <CloseCircleOutlined
-                            className="mr-2"
-                            style={{ fontSize: 16, color: '#808080' }}
-                          />
-
-                          <div>Canceled</div>
-                        </div>
-                      )}
-
-                      {restore.status === RestoreStatus.IN_PROGRESS && (
-                        <div className="flex items-center font-bold text-blue-600">
-                          <SyncOutlined spin />
-                          <span className="ml-2">In progress</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {restore.status === RestoreStatus.IN_PROGRESS && (
-                      <div className="ml-2">
-                        {cancellingRestoreId === restore.id ? (
-                          <SyncOutlined spin style={{ fontSize: 16 }} />
-                        ) : (
-                          <Tooltip title="Cancel restore">
-                            <CloseCircleOutlined
-                              className="cursor-pointer"
-                              onClick={() => {
-                                if (cancellingRestoreId) return;
-                                setRestoreToCancelId(restore.id);
-                                setShowCancelConfirmation(true);
-                              }}
-                              style={{
-                                color: '#ff0000',
-                                fontSize: 16,
-                                opacity: cancellingRestoreId ? 0.2 : 1,
-                              }}
-                            />
-                          </Tooltip>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mb-1 flex">
-                    <div className="w-[75px] min-w-[75px]">Started at</div>
-                    <div>
-                      {dayjs.utc(restore.createdAt).local().format(getUserTimeFormat().format)} (
-                      {dayjs.utc(restore.createdAt).local().fromNow()})
-                    </div>
-                  </div>
-
-                  {restore.status === RestoreStatus.IN_PROGRESS && (
-                    <div className="flex">
-                      <div className="w-[75px] min-w-[75px]">Duration</div>
-                      <div>
-                        <div>{duration}</div>
-                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                          Expected restoration time usually 3x-5x longer than the backup duration
-                          (sometimes less, sometimes more depending on data type)
-                          <br />
-                          <br />
-                          So it is expected to take up to {expectedRestoreDuration} (usually
-                          significantly faster)
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+    <>
+      {versionMismatchMessage && pendingRestoreDb && (
+        <Modal
+          title="Version mismatch"
+          open={!!versionMismatchMessage}
+          onCancel={() => {
+            setVersionMismatchMessage(undefined);
+            setPendingRestoreDb(undefined);
+          }}
+          maskClosable={false}
+          okText="Restore anyway"
+          okType="primary"
+          okButtonProps={{ danger: true }}
+          cancelText="Cancel"
+          onOk={() => {
+            setVersionMismatchMessage(undefined);
+            doRestore(pendingRestoreDb, true);
+          }}
+        >
+          <div className="space-y-3">
+            <div className="text-sm">{versionMismatchMessage}</div>
+            <div className="rounded border border-yellow-300 bg-yellow-50 p-3 text-sm dark:border-yellow-600 dark:bg-yellow-900/30">
+              Forcing a restore across different versions may cause failures or data corruption. Only
+              proceed if you understand the risks.
+            </div>
           </div>
-        </>
+        </Modal>
       )}
 
       {showingRestoreError && (
@@ -368,6 +239,182 @@ export const RestoresComponent = ({ database, backup }: Props) => {
           actionButtonColor="red"
         />
       )}
-    </div>
+
+      {isShowRestore ? (
+        <>
+          <div className="my-5 text-sm">
+            Enter info of the database we will restore backup to.{' '}
+            <u>The empty database for restore should be created before the restore</u>. During the
+            restore, all the current data will be cleared
+            <br />
+            <br />
+            Make sure the database is not used right now (most likely you do not want to restore the
+            data to the same DB where the backup was made)
+          </div>
+
+          <EditDatabaseSpecificDataComponent
+            database={editingDatabase}
+            onCancel={() => setIsShowRestore(false)}
+            isShowBackButton={false}
+            onBack={() => setIsShowRestore(false)}
+            saveButtonText="Restore to this DB"
+            isSaveToApi={false}
+            onSaved={(database) => {
+              setEditingDatabase({ ...database });
+              restore(database);
+            }}
+            isRestoreMode={true}
+          />
+        </>
+      ) : (
+        <div className="mt-5">
+          {isLoading ? (
+            <div className="flex w-full justify-center">
+              <Spin />
+            </div>
+          ) : (
+            <>
+              <Button
+                className="w-full"
+                type="primary"
+                disabled={isRestoreInProgress}
+                loading={isRestoreInProgress}
+                onClick={() => setIsShowRestore(true)}
+              >
+                Select database to restore to
+              </Button>
+
+              {restores.length === 0 && (
+                <div className="my-5 text-center text-gray-400">No restores yet</div>
+              )}
+
+              <div className="mt-5">
+                {restores.map((restore) => {
+                  let restoreDurationMs = 0;
+                  if (restore.status === RestoreStatus.IN_PROGRESS) {
+                    restoreDurationMs = Date.now() - new Date(restore.createdAt).getTime();
+                  } else {
+                    restoreDurationMs = restore.restoreDurationMs;
+                  }
+
+                  const minutes = Math.floor(restoreDurationMs / 60000);
+                  const seconds = Math.floor((restoreDurationMs % 60000) / 1000);
+                  const milliseconds = restoreDurationMs % 1000;
+                  const duration = `${minutes}m ${seconds}s ${milliseconds}ms`;
+
+                  const backupDurationMs = backup.backupDurationMs;
+                  const expectedRestoreDurationMs = backupDurationMs * 5;
+                  const expectedRestoreDuration = `${Math.floor(expectedRestoreDurationMs / 60000)}m ${Math.floor((expectedRestoreDurationMs % 60000) / 1000)}s`;
+
+                  return (
+                    <div key={restore.id} className="mb-1 rounded border border-gray-200 p-3 text-sm">
+                      <div className="mb-1 flex items-center justify-between">
+                        <div className="flex flex-1">
+                          <div className="w-[75px] min-w-[75px]">Status</div>
+
+                          {restore.status === RestoreStatus.FAILED && (
+                            <Tooltip title="Click to see error details">
+                              <div
+                                className="flex cursor-pointer items-center text-red-600 underline"
+                                onClick={() => setShowingRestoreError(restore)}
+                              >
+                                <ExclamationCircleOutlined
+                                  className="mr-2"
+                                  style={{ fontSize: 16, color: '#ff0000' }}
+                                />
+
+                                <div>Failed</div>
+                              </div>
+                            </Tooltip>
+                          )}
+
+                          {restore.status === RestoreStatus.COMPLETED && (
+                            <div className="flex items-center">
+                              <CheckCircleOutlined
+                                className="mr-2"
+                                style={{ fontSize: 16, color: '#008000' }}
+                              />
+
+                              <div>Successful</div>
+                            </div>
+                          )}
+
+                          {restore.status === RestoreStatus.CANCELED && (
+                            <div className="flex items-center text-gray-500">
+                              <CloseCircleOutlined
+                                className="mr-2"
+                                style={{ fontSize: 16, color: '#808080' }}
+                              />
+
+                              <div>Canceled</div>
+                            </div>
+                          )}
+
+                          {restore.status === RestoreStatus.IN_PROGRESS && (
+                            <div className="flex items-center font-bold text-blue-600">
+                              <SyncOutlined spin />
+                              <span className="ml-2">In progress</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {restore.status === RestoreStatus.IN_PROGRESS && (
+                          <div className="ml-2">
+                            {cancellingRestoreId === restore.id ? (
+                              <SyncOutlined spin style={{ fontSize: 16 }} />
+                            ) : (
+                              <Tooltip title="Cancel restore">
+                                <CloseCircleOutlined
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    if (cancellingRestoreId) return;
+                                    setRestoreToCancelId(restore.id);
+                                    setShowCancelConfirmation(true);
+                                  }}
+                                  style={{
+                                    color: '#ff0000',
+                                    fontSize: 16,
+                                    opacity: cancellingRestoreId ? 0.2 : 1,
+                                  }}
+                                />
+                              </Tooltip>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mb-1 flex">
+                        <div className="w-[75px] min-w-[75px]">Started at</div>
+                        <div>
+                          {dayjs.utc(restore.createdAt).local().format(getUserTimeFormat().format)} (
+                          {dayjs.utc(restore.createdAt).local().fromNow()})
+                        </div>
+                      </div>
+
+                      {restore.status === RestoreStatus.IN_PROGRESS && (
+                        <div className="flex">
+                          <div className="w-[75px] min-w-[75px]">Duration</div>
+                          <div>
+                            <div>{duration}</div>
+                            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                              Expected restoration time usually 3x-5x longer than the backup duration
+                              (sometimes less, sometimes more depending on data type)
+                              <br />
+                              <br />
+                              So it is expected to take up to {expectedRestoreDuration} (usually
+                              significantly faster)
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </>
   );
 };

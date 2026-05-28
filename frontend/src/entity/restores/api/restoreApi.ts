@@ -24,12 +24,14 @@ export const restoreApi = {
     mysql,
     mariadb,
     mongodb,
+    isSkipVersionCheck,
   }: {
     backupId: string;
     postgresql?: PostgresqlDatabase;
     mysql?: MysqlDatabase;
     mariadb?: MariadbDatabase;
     mongodb?: MongodbDatabase;
+    isSkipVersionCheck?: boolean;
   }) {
     const requestOptions: RequestOptions = new RequestOptions();
     requestOptions.setBody(
@@ -38,6 +40,7 @@ export const restoreApi = {
         mysqlDatabase: mysql,
         mariadbDatabase: mariadb,
         mongodbDatabase: mongodb,
+        isSkipVersionCheck: isSkipVersionCheck || false,
       }),
     );
 

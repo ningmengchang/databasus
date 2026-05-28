@@ -12,4 +12,6 @@ type RestoreBackupRequest struct {
 	MysqlDatabase      *mysql.MysqlDatabase           `json:"mysqlDatabase"`
 	MariadbDatabase    *mariadb.MariadbDatabase       `json:"mariadbDatabase"`
 	MongodbDatabase    *mongodb.MongodbDatabase       `json:"mongodbDatabase"`
+
+	IsSkipVersionCheck bool `json:"isSkipVersionCheck"`
 }
