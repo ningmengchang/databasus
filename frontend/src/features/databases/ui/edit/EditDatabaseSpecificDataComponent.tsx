@@ -28,6 +28,7 @@ interface Props {
 
   isShowDbName?: boolean;
   isRestoreMode?: boolean;
+  onChange?: (database: Database) => void;
 }
 
 export const EditDatabaseSpecificDataComponent = ({
@@ -44,6 +45,7 @@ export const EditDatabaseSpecificDataComponent = ({
   onSaved,
   isShowDbName = true,
   isRestoreMode = false,
+  onChange,
 }: Props) => {
   const [isShowReadOnlyDialog, setIsShowReadOnlyDialog] = useState(false);
   const [editingDatabase, setEditingDatabase] = useState<Database>(database);
@@ -129,6 +131,7 @@ export const EditDatabaseSpecificDataComponent = ({
     isSaveToApi,
     onSaved: saveDb,
     isShowDbName,
+    onChange,
   };
 
   switch (editingDatabase.type) {

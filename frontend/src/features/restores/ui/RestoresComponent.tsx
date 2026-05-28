@@ -2,16 +2,23 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   CopyOutlined,
+  DeleteOutlined,
   ExclamationCircleOutlined,
+  SaveOutlined,
   SyncOutlined,
 } from '@ant-design/icons';
-import { App, Button, Modal, Spin, Tooltip } from 'antd';
+import { App, Button, Input, Modal, Select, Spin, Tooltip } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 
 import type { Backup } from '../../../entity/backups';
-import { type Database, DatabaseType } from '../../../entity/databases';
+import { type Database, DatabaseType, PostgresSslMode } from '../../../entity/databases';
 import { type Restore, RestoreStatus, restoreApi } from '../../../entity/restores';
+import {
+  savedRestoreTargetApi,
+  type SavedRestoreTarget,
+  type ConnectionFields,
+} from '../../../entity/saved-restore-targets';
 import { ClipboardHelper } from '../../../shared/lib/ClipboardHelper';
 import { getUserTimeFormat } from '../../../shared/time';
 import { ConfirmationComponent } from '../../../shared/ui';
@@ -84,6 +91,13 @@ export const RestoresComponent = ({ database, backup }: Props) => {
   const [versionMismatchMessage, setVersionMismatchMessage] = useState<string | undefined>();
   const [pendingRestoreDb, setPendingRestoreDb] = useState<Database | undefined>();
 
+  const [savedTargets, setSavedTargets] = useState<SavedRestoreTarget[]>([]);
+  const [selectedTargetId, setSelectedTargetId] = useState<string | undefined>();
+  const [isSavingTarget, setIsSavingTarget] = useState(false);
+  const [isSaveTargetModalOpen, setIsSaveTargetModalOpen] = useState(false);
+  const [newTargetName, setNewTargetName] = useState('');
+  const [formKey, setFormKey] = useState(0);
+
   const isReloadInProgress = useRef(false);
 
   const loadRestores = async () => {
@@ -145,6 +159,177 @@ export const RestoresComponent = ({ database, backup }: Props) => {
     }
   };
 
+  const loadSavedTargets = async () => {
+    try {
+      const targets = await savedRestoreTargetApi.getSavedRestoreTargets();
+      setSavedTargets(targets.filter((t) => t.databaseType === database.type));
+    } catch {
+      // saved targets are optional, don't alert on failure
+    }
+  };
+
+  const extractConnectionFields = (db: Database): ConnectionFields => {
+    switch (database.type) {
+      case DatabaseType.POSTGRES:
+        return {
+          host: db.postgresql?.host || '',
+          port: db.postgresql?.port || 5432,
+          username: db.postgresql?.username || '',
+          password: db.postgresql?.password || '',
+          database: db.postgresql?.database || '',
+          sslMode: db.postgresql?.sslMode,
+          sslClientCert: db.postgresql?.sslClientCert,
+          sslClientKey: db.postgresql?.sslClientKey,
+          sslRootCert: db.postgresql?.sslRootCert,
+          isExcludeExtensions: db.postgresql?.isExcludeExtensions,
+          isRestoreOwnership: db.postgresql?.isRestoreOwnership,
+          isRestorePrivileges: db.postgresql?.isRestorePrivileges,
+          excludeTables: db.postgresql?.excludeTables,
+        };
+      case DatabaseType.MYSQL:
+        return {
+          host: db.mysql?.host || '',
+          port: db.mysql?.port || 3306,
+          username: db.mysql?.username || '',
+          password: db.mysql?.password || '',
+          database: db.mysql?.database || '',
+          isHttps: db.mysql?.isHttps,
+          excludeTables: db.mysql?.excludeTables,
+        };
+      case DatabaseType.MARIADB:
+        return {
+          host: db.mariadb?.host || '',
+          port: db.mariadb?.port || 3306,
+          username: db.mariadb?.username || '',
+          password: db.mariadb?.password || '',
+          database: db.mariadb?.database || '',
+          isHttps: db.mariadb?.isHttps,
+          isExcludeEvents: db.mariadb?.isExcludeEvents,
+          excludeTables: db.mariadb?.excludeTables,
+        };
+      case DatabaseType.MONGODB:
+        return {
+          host: db.mongodb?.host || '',
+          port: db.mongodb?.port || 27017,
+          username: db.mongodb?.username || '',
+          password: db.mongodb?.password || '',
+          database: db.mongodb?.database || '',
+          authDatabase: db.mongodb?.authDatabase,
+          isHttps: db.mongodb?.isHttps,
+          isSrv: db.mongodb?.isSrv,
+          isDirectConnection: db.mongodb?.isDirectConnection,
+          excludeCollections: db.mongodb?.excludeCollections,
+        };
+      default:
+        return { host: '', port: 0, username: '', password: '' };
+    }
+  };
+
+  const applySavedTarget = (target: SavedRestoreTarget) => {
+    const conn = target.connection;
+    const updated = { ...editingDatabase };
+
+    switch (database.type) {
+      case DatabaseType.POSTGRES:
+        updated.postgresql = {
+          ...updated.postgresql!,
+          host: conn.host,
+          port: conn.port,
+          username: conn.username,
+          password: conn.password,
+          database: conn.database || updated.postgresql!.database,
+          sslMode: (conn.sslMode as PostgresSslMode) || updated.postgresql!.sslMode,
+          sslClientCert: conn.sslClientCert || '',
+          sslClientKey: conn.sslClientKey || '',
+          sslRootCert: conn.sslRootCert || '',
+          isExcludeExtensions: conn.isExcludeExtensions ?? updated.postgresql!.isExcludeExtensions,
+          isRestoreOwnership: conn.isRestoreOwnership ?? updated.postgresql!.isRestoreOwnership,
+          isRestorePrivileges: conn.isRestorePrivileges ?? updated.postgresql!.isRestorePrivileges,
+          excludeTables: conn.excludeTables || updated.postgresql!.excludeTables,
+        };
+        break;
+      case DatabaseType.MYSQL:
+        updated.mysql = {
+          ...updated.mysql!,
+          host: conn.host,
+          port: conn.port,
+          username: conn.username,
+          password: conn.password,
+          database: conn.database || updated.mysql!.database,
+          isHttps: conn.isHttps ?? updated.mysql!.isHttps,
+          excludeTables: conn.excludeTables || updated.mysql!.excludeTables,
+        };
+        break;
+      case DatabaseType.MARIADB:
+        updated.mariadb = {
+          ...updated.mariadb!,
+          host: conn.host,
+          port: conn.port,
+          username: conn.username,
+          password: conn.password,
+          database: conn.database || updated.mariadb!.database,
+          isHttps: conn.isHttps ?? updated.mariadb!.isHttps,
+          isExcludeEvents: conn.isExcludeEvents ?? updated.mariadb!.isExcludeEvents,
+          excludeTables: conn.excludeTables || updated.mariadb!.excludeTables,
+        };
+        break;
+      case DatabaseType.MONGODB:
+        updated.mongodb = {
+          ...updated.mongodb!,
+          host: conn.host,
+          port: conn.port,
+          username: conn.username,
+          password: conn.password,
+          database: conn.database || updated.mongodb!.database,
+          authDatabase: conn.authDatabase || updated.mongodb!.authDatabase,
+          isHttps: conn.isHttps ?? updated.mongodb!.isHttps,
+          isSrv: conn.isSrv ?? updated.mongodb!.isSrv,
+          isDirectConnection: conn.isDirectConnection ?? updated.mongodb!.isDirectConnection,
+          excludeCollections: conn.excludeCollections || updated.mongodb!.excludeCollections,
+        };
+        break;
+    }
+
+    setEditingDatabase(updated);
+    setSelectedTargetId(target.id);
+    setFormKey((k) => k + 1);
+  };
+
+  const handleSaveAsTarget = async () => {
+    if (!newTargetName.trim()) return;
+
+    setIsSavingTarget(true);
+    try {
+      const conn = extractConnectionFields(editingDatabase);
+      await savedRestoreTargetApi.createSavedRestoreTarget({
+        name: newTargetName.trim(),
+        databaseType: database.type,
+        connection: conn,
+      });
+      setNewTargetName('');
+      setIsSaveTargetModalOpen(false);
+      message.success('Restore target saved');
+      await loadSavedTargets();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setIsSavingTarget(false);
+    }
+  };
+
+  const handleDeleteTarget = async (targetId: string) => {
+    try {
+      await savedRestoreTargetApi.deleteSavedRestoreTarget(targetId);
+      setSavedTargets((prev) => prev.filter((t) => t.id !== targetId));
+      if (selectedTargetId === targetId) {
+        setSelectedTargetId(undefined);
+      }
+      message.success('Restore target deleted');
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
   useEffect(() => {
     setIsLoading(true);
     loadRestores().finally(() => setIsLoading(false));
@@ -155,6 +340,12 @@ export const RestoresComponent = ({ database, backup }: Props) => {
 
     return () => clearInterval(interval);
   }, [backup.id]);
+
+  useEffect(() => {
+    if (isShowRestore) {
+      loadSavedTargets();
+    }
+  }, [isShowRestore]);
 
   const isRestoreInProgress = restores.some(
     (restore) => restore.status === RestoreStatus.IN_PROGRESS,
@@ -252,7 +443,72 @@ export const RestoresComponent = ({ database, backup }: Props) => {
             data to the same DB where the backup was made)
           </div>
 
+          <div className="mb-4 flex items-center gap-2">
+            {savedTargets.length > 0 && (
+              <>
+                <Select
+                  className="w-[250px]"
+                  placeholder="Load a saved target..."
+                  value={selectedTargetId}
+                  onChange={(id) => {
+                    const target = savedTargets.find((t) => t.id === id);
+                    if (target) applySavedTarget(target);
+                  }}
+                  allowClear
+                  onClear={() => {
+                    setSelectedTargetId(undefined);
+                    setEditingDatabase(createInitialEditingDatabase(database));
+                    setFormKey((k) => k + 1);
+                  }}
+                  options={savedTargets.map((t) => ({
+                    value: t.id,
+                    label: t.name,
+                  }))}
+                />
+                {selectedTargetId && (
+                  <Tooltip title="Delete saved target">
+                    <Button
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      onClick={() => handleDeleteTarget(selectedTargetId)}
+                    />
+                  </Tooltip>
+                )}
+              </>
+            )}
+
+            <Tooltip title="Save restore target">
+              <Button
+                size="small"
+                icon={<SaveOutlined />}
+                onClick={() => setIsSaveTargetModalOpen(true)}
+              />
+            </Tooltip>
+          </div>
+
+          <Modal
+            title="Save restore target"
+            open={isSaveTargetModalOpen}
+            onOk={handleSaveAsTarget}
+            onCancel={() => {
+              setIsSaveTargetModalOpen(false);
+              setNewTargetName('');
+            }}
+            confirmLoading={isSavingTarget}
+            okText="Save"
+            okButtonProps={{ disabled: !newTargetName.trim() }}
+          >
+            <Input
+              placeholder="Enter a name for this target (e.g. Production DB)"
+              value={newTargetName}
+              onChange={(e) => setNewTargetName(e.target.value)}
+              onPressEnter={handleSaveAsTarget}
+            />
+          </Modal>
+
           <EditDatabaseSpecificDataComponent
+            key={formKey}
             database={editingDatabase}
             onCancel={() => setIsShowRestore(false)}
             isShowBackButton={false}
@@ -262,6 +518,12 @@ export const RestoresComponent = ({ database, backup }: Props) => {
             onSaved={(database) => {
               setEditingDatabase({ ...database });
               restore(database);
+            }}
+            onChange={(database) => {
+              setEditingDatabase((prev) => {
+                if (JSON.stringify(prev) === JSON.stringify(database)) return prev;
+                return { ...database };
+              });
             }}
             isRestoreMode={true}
           />

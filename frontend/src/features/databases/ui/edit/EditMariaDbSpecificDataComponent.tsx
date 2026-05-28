@@ -23,6 +23,7 @@ interface Props {
   onSaved: (database: Database) => void;
 
   isShowDbName?: boolean;
+  onChange?: (database: Database) => void;
 }
 
 export const EditMariaDbSpecificDataComponent = ({
@@ -38,6 +39,7 @@ export const EditMariaDbSpecificDataComponent = ({
   isSaveToApi,
   onSaved,
   isShowDbName = true,
+  onChange,
 }: Props) => {
   const { message } = App.useApp();
 
@@ -165,6 +167,12 @@ export const EditMariaDbSpecificDataComponent = ({
 
     setEditingDatabase({ ...database });
   }, [database]);
+
+  useEffect(() => {
+    if (editingDatabase) {
+      onChange?.(editingDatabase);
+    }
+  }, [editingDatabase]);
 
   if (!editingDatabase) return null;
 

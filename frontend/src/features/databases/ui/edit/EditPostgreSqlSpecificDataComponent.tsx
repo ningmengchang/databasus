@@ -30,6 +30,7 @@ interface Props {
 
   isShowDbName?: boolean;
   isRestoreMode?: boolean;
+  onChange?: (database: Database) => void;
 }
 
 const IPV4_PATTERN = /^\d{1,3}(\.\d{1,3}){3}$/;
@@ -73,6 +74,7 @@ export const EditPostgreSqlSpecificDataComponent = ({
   onSaved,
   isShowDbName = true,
   isRestoreMode = false,
+  onChange,
 }: Props) => {
   const { message } = App.useApp();
 
@@ -269,6 +271,12 @@ export const EditPostgreSqlSpecificDataComponent = ({
 
     setEditingDatabase({ ...database });
   }, [database]);
+
+  useEffect(() => {
+    if (editingDatabase) {
+      onChange?.(editingDatabase);
+    }
+  }, [editingDatabase]);
 
   if (!editingDatabase) return null;
 

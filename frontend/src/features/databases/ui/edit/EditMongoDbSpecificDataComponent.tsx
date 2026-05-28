@@ -23,6 +23,7 @@ interface Props {
   onSaved: (database: Database) => void;
 
   isShowDbName?: boolean;
+  onChange?: (database: Database) => void;
 }
 
 export const EditMongoDbSpecificDataComponent = ({
@@ -38,6 +39,7 @@ export const EditMongoDbSpecificDataComponent = ({
   isSaveToApi,
   onSaved,
   isShowDbName = true,
+  onChange,
 }: Props) => {
   const { message } = App.useApp();
 
@@ -181,6 +183,12 @@ export const EditMongoDbSpecificDataComponent = ({
 
     setEditingDatabase({ ...database });
   }, [database]);
+
+  useEffect(() => {
+    if (editingDatabase) {
+      onChange?.(editingDatabase);
+    }
+  }, [editingDatabase]);
 
   if (!editingDatabase) return null;
 

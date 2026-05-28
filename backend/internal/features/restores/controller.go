@@ -11,13 +11,19 @@ import (
 )
 
 type RestoreController struct {
-	restoreService *RestoreService
+	restoreService            *RestoreService
+	savedRestoreTargetService *SavedRestoreTargetService
 }
 
 func (c *RestoreController) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/restores/:backupId", c.GetRestores)
 	router.POST("/restores/:backupId/restore", c.RestoreBackup)
 	router.POST("/restores/cancel/:restoreId", c.CancelRestore)
+
+	router.GET("/saved-restore-targets", c.GetSavedRestoreTargets)
+	router.POST("/saved-restore-targets", c.CreateSavedRestoreTarget)
+	router.PUT("/saved-restore-targets/:targetId", c.UpdateSavedRestoreTarget)
+	router.DELETE("/saved-restore-targets/:targetId", c.DeleteSavedRestoreTarget)
 }
 
 // GetRestores
@@ -111,6 +117,93 @@ func (c *RestoreController) CancelRestore(ctx *gin.Context) {
 	}
 
 	if err := c.restoreService.CancelRestore(user, restoreID); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
+}
+
+func (c *RestoreController) GetSavedRestoreTargets(ctx *gin.Context) {
+	user, ok := users_middleware.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	targets, err := c.savedRestoreTargetService.GetSavedTargets(user)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, targets)
+}
+
+func (c *RestoreController) CreateSavedRestoreTarget(ctx *gin.Context) {
+	user, ok := users_middleware.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	var req restores_core.CreateSavedRestoreTargetRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	target, err := c.savedRestoreTargetService.CreateSavedTarget(user, &req)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, target)
+}
+
+func (c *RestoreController) UpdateSavedRestoreTarget(ctx *gin.Context) {
+	user, ok := users_middleware.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	targetID, err := uuid.Parse(ctx.Param("targetId"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid target ID"})
+		return
+	}
+
+	var req restores_core.UpdateSavedRestoreTargetRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	target, err := c.savedRestoreTargetService.UpdateSavedTarget(user, targetID, &req)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, target)
+}
+
+func (c *RestoreController) DeleteSavedRestoreTarget(ctx *gin.Context) {
+	user, ok := users_middleware.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	targetID, err := uuid.Parse(ctx.Param("targetId"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid target ID"})
+		return
+	}
+
+	if err := c.savedRestoreTargetService.DeleteSavedTarget(user, targetID); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

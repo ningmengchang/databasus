@@ -34,10 +34,17 @@ var (
 		disk.GetDiskService(),
 		tasks_cancellation.GetTaskCancelManager(),
 	}
+
+	savedRestoreTargetRepository = &restores_core.SavedRestoreTargetRepository{}
+	savedRestoreTargetService    = &SavedRestoreTargetService{
+		savedRestoreTargetRepository,
+		encryption.GetFieldEncryptor(),
+	}
 )
 
 var restoreController = &RestoreController{
 	restoreService,
+	savedRestoreTargetService,
 }
 
 func GetRestoreController() *RestoreController {
